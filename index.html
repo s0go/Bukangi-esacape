@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bukangi Escape</title>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+body {
+    margin: 0; min-height: 100vh; background: #030712;
+    display: flex; justify-content: center; align-items: center; font-family: 'Pretendard', sans-serif;
+    user-select: none; overflow: hidden;
+}
+#gameBox {
+    position: relative; width: min(1000px, 95vw); aspect-ratio: 16/9;
+    overflow: hidden; border: 3px solid rgba(56, 189, 248, 0.4); border-radius: 20px; background: #0284c7;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8); cursor: none;
+}
+canvas { width: 100%; height: 100%; display: block; }
+#hud {
+    position: absolute; top: 18px; left: 24px; right: 24px; display: flex; justify-content: space-between; align-items: center;
+    color: white; font-weight: 800; font-size: 20px; text-shadow: 0 2px 8px rgba(0,0,0,0.6); z-index: 5; pointer-events: none;
+}
+.progress-container {
+    width: 320px; height: 16px; background: rgba(15, 23, 42, 0.6); border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 10px; overflow: hidden; position: relative;
+}
+.progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #38bdf8, #4ade80); transition: width 0.1s linear; }
+.progress-text { position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; font-size: 11px; font-weight: 800; color: #fff; }
+#menu { position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; z-index: 10; backdrop-filter: blur(6px); background: rgba(3, 7, 18, 0.75); }
+.panel {
+    width: min(440px, 90%); padding: 32px; background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 24px; color: white; text-align: center;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.6); cursor: default;
+}
+.panel h1 { font-size: 34px; font-weight: 900; margin: 0 0 6px; color: #38bdf8; letter-spacing: -1px; text-shadow: 0 0 12px rgba(56,189,248,0.4); }
+.panel .sub-title { font-size: 13px; font-weight: 700; color: #facc15; margin-bottom: 16px; letter-spacing: 1px; }
+.panel p { font-size: 14px; color: #94a3b8; margin: 0 0 20px; line-height: 1.6; }
+button {
+    width: 100%; border: none; padding: 14px; border-radius: 12px; background: #38bdf8; color: #0f172a;
+    font-size: 16px; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(56,189,248,0.3);
+}
+button:hover { background: #7dd3fc; transform: translateY(-1px); }
+</style>
+</head>
+<body>
+
+<div id="gameBox">
+    <canvas id="game" width="1000" height="562"></canvas>
+    
+    <div id="hud">
+        <div>DISTANCE: <span id="distVal" style="color:#facc15;">0</span>m</div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+            <div class="progress-text">북항 수로 ➔ 넓은 바다 (1000m)</div>
+        </div>
+        <div>STAMINA: <span id="hpVal" style="color:#4ade80;">100</span>%</div>
+    </div>
+
+    <div id="menu"></div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const distVal = document.getElementById("distVal");
+const hpVal = document.getElementById("hpVal");
+const progressBar = document.getElementById("progressBar");
+const menu = document.getElementById("menu");
+
+const GOAL_DIST = 1000;
+let state = "START";
+let distance = 0;
+let mousePos = { x: 200, y: 281 };
+
+let bukang = {
+    x: 200, y: 281, size: 28, hp: 100, angle: 0,
+    invincibleUntil: 0
+};
+
+let obstacles = [];
+let fishes = [];
+let frame = 0;
+
+canvas.addEventListener("mousemove", e => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    mousePos.x = (e.clientX - rect.left) * scaleX;
+    mousePos.y = (e.clientY - rect.top) * scaleY;
+});
+
+function showMenu(isWin = false, isGameOver = false) {
+    menu.style.display = "flex";
+    if(state === "START") {
+        menu.innerHTML = `
+            <div class="panel">
+                <h1>BUKANGI ESCAPE</h1>
+                <div class="sub-title">🦈 부캉이의 북항 탈출 대작전</div>
+                <p>부산 북항 수로에 갇힌 상어 '부캉이'!<br>마우스로 조종하여 수로의 그물, 폰툰, 부표를 피하고<br>숭어를 먹어 체력을 회복하며 넓은 바다로 탈출하세요!</p>
+                <button onclick="startGame()">탈출 시작하기</button>
+            </div>
+        `;
+    } else if(isWin) {
+        menu.innerHTML = `
+            <div class="panel">
+                <h1 style="color:#4ade80;">ESCAPE CLEAR!</h1>
+                <div class="sub-title">🌊 탈출 성공!</div>
+                <p style="font-size:15px; color:#cbd5e1;">부캉이가 무사히 넓은 바다로 나갔습니다!</p>
+                <button onclick="startGame()">다시 도전하기</button>
+            </div>
+        `;
+    } else if(isGameOver) {
+        menu.innerHTML = `
+            <div class="panel">
+                <h1 style="color:#f87171;">GAME OVER</h1>
+                <div class="sub-title" style="color:#f87171;">💥 탈출 실패!</div>
+                <p style="font-size:15px
